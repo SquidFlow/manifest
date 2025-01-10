@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - fluentbit.fluent.io_clusterfilters.yaml
+  - fluentbit.fluent.io_clusterfluentbitconfigs.yaml
+  - fluentbit.fluent.io_clusterinputs.yaml
+  - fluentbit.fluent.io_clusteroutputs.yaml
+  - fluentbit.fluent.io_clusterparsers.yaml
+  - fluentbit.fluent.io_collectors.yaml
+  - fluentbit.fluent.io_filters.yaml
+  - fluentbit.fluent.io_fluentbitconfigs.yaml
+  - fluentbit.fluent.io_fluentbits.yaml
+  - fluentbit.fluent.io_outputs.yaml
+  - fluentbit.fluent.io_parsers.yaml
+  - fluentd.fluent.io_clusterfilters.yaml
+  - fluentd.fluent.io_clusterfluentdconfigs.yaml
+  - fluentd.fluent.io_clusterinputs.yaml
+  - fluentd.fluent.io_clusteroutputs.yaml
+  - fluentd.fluent.io_filters.yaml
+  - fluentd.fluent.io_fluentdconfigs.yaml
+  - fluentd.fluent.io_fluentds.yaml
+  - fluentd.fluent.io_inputs.yaml
+  - fluentd.fluent.io_outputs.yaml

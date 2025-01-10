@@ -1,0 +1,122 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: influxdb-backup
+  namespace: argowf
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: main
+  arguments:
+    parameters:
+      - name: bucket
+        value: poc-argo
+      - name: bucket-path
+        value: backup
+  templates:
+  - name: main
+    steps:
+    - - name: influx
+        template: influxdb
+
+    - - name: init-database
+        template: influxdb-client
+        arguments:
+          parameters:
+          - name: cmd
+            value: curl -XPOST 'http://{{steps.influx.ip}}:8086/query' --data-urlencode "q=CREATE DATABASE mydb"
+
+    - - name: producer-1
+        template: influxdb-client
+        arguments:
+          parameters:
+          - name: cmd
+            value: for i in $(seq 1 20); do curl -XPOST 'http://{{steps.influx.ip}}:8086/write?db=mydb' -d "cpu,host=server01,region=uswest load=$i" ; sleep .5 ; done
+      - name: producer-2
+        template: influxdb-client
+        arguments:
+          parameters:
+          - name: cmd
+            value: for i in $(seq 1 20); do curl -XPOST 'http://{{steps.influx.ip}}:8086/write?db=mydb' -d "cpu,host=server02,region=uswest load=$((RANDOM % 100))" ; sleep .5 ; done
+      - name: producer-3
+        template: influxdb-client
+        arguments:
+          parameters:
+          - name: cmd
+            value: curl -XPOST 'http://{{steps.influx.ip}}:8086/write?db=mydb' -d 'cpu,host=server03,region=useast load=15.4'
+
+    - - name: consumer
+        template: influxdb-client
+        arguments:
+          parameters:
+          - name: cmd
+            value: curl --silent -G http://{{steps.influx.ip}}:8086/query?pretty=true --data-urlencode "db=mydb" --data-urlencode "q=SELECT * FROM cpu"
+
+    - - name: influx-backup
+        template: influx-backup
+        arguments:
+          parameters:
+          - name: ip
+            value: '{{steps.influx.ip}}'
+
+    - - name: push-bucket
+        template: store-backup
+        arguments:
+          artifacts:
+          - name: data
+            from: "{{steps.influx-backup.outputs.artifacts.data}}"
+
+  - name: influxdb
+    daemon: true
+    container:
+      image: influxdb:1.8
+      env:
+       - name: INFLUXDB_BIND_ADDRESS
+         value: ":8088"
+      ports:
+       - name: influxdb-8086
+         containerPort: 8086
+         protocol: TCP
+       - name: influxdb-8088
+         containerPort: 8088
+         protocol: TCP
+      readinessProbe:
+        httpGet:
+          path: /ping
+          port: 8086
+        initialDelaySeconds: 5
+        timeoutSeconds: 1
+
+  - name: influx-backup
+    inputs:
+      parameters:
+        - name: ip
+    outputs:
+      artifacts:
+        - name: data
+          path: /tmp/backup
+    container:
+      image: influxdb:1.8
+      command: [ "/bin/bash","-c" ]
+      args: ["mkdir -p /tmp/backup;influxd backup -db mydb -portable -host {{inputs.parameters.ip}}:8088 /tmp/backup"]
+
+  - name: influxdb-client
+    inputs:
+      parameters:
+      - name: cmd
+    container:
+      image: appropriate/curl:latest
+      command: ["sh", "-c"]
+      args: ["{{inputs.parameters.cmd}}"]
+
+  - name: store-backup
+    inputs:
+      artifacts:
+        - name: data
+          path: /opt
+    container:
+      image: paperhive/gcloud-tools
+      command: ["bash","-c"]
+      args: ["ls /opt;cd /opt;tar -zcvf mydb.tar.gz ./;gsutil cp mydb.tar.gz gs://{{workflow.parameters.bucket}}/{{workflow.parameters.bucket-path}}"]
+
+
+
